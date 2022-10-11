@@ -213,6 +213,26 @@ consoleintr(int (*getc)(void))
         consputc(BACKSPACE);
       }
       break;
+
+      char tempBuff[INPUT_BUF];
+      int i;
+    case C('N'):  // delete numbers in current line
+        i = 0;
+        while (input.e != input.w &&
+            input.buf[(input.e - 1) % INPUT_BUF] != '\n') {
+            char s = input.buf[(input.e - 1) % INPUT_BUF];
+            consputc(BACKSPACE);
+            input.e--;
+            if (s < '0' || s > '9')
+            {
+                tempBuff[i] = s;
+                i += 1;
+            }
+        }
+        for (int j = i - 1; j >= 0; j--)
+            consputc(tempBuff[j]);
+        break;
+
     default:
       if(c != 0 && input.e-input.r < INPUT_BUF){
         c = (c == '\r') ? '\n' : c;
