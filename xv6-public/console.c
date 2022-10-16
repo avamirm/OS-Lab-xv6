@@ -188,6 +188,55 @@ struct {
 
 #define C(x)  ((x)-'@')  // Control-x
 
+void printReverseLine()
+{
+    char tempBuf[INPUT_BUF];
+    char reverseBuf[INPUT_BUF];
+    int bufSize = input.e - input.w;
+    strncpy(tempBuf, input.buf + input.w, input.e - input.w );
+    for(int i = 0; i < bufSize; i++)
+      reverseBuf[i] = tempBuf[bufSize - 1 -i];
+    while(input.e != input.w &&
+            input.buf[(input.e-1) % INPUT_BUF] != '\n'){
+        input.e--;
+        consputc(BACKSPACE);
+      }
+    for(int i = 0;i < bufSize ; i++)
+    {
+        input.buf[input.e % INPUT_BUF] = reverseBuf[i];
+        input.e += 1;
+        consputc(reverseBuf[i]);
+    }
+
+}
+void
+printLineWithoutNumbers()
+{
+    char tempBuf[INPUT_BUF];
+    int bufIndex = 0;
+    int bufSize = input.e - input.w;
+    for(int i = 0; i < bufSize; ++i)
+    {
+      char currentChar = input.buf[(input.w + i) % INPUT_BUF];
+      if(currentChar < '0' || currentChar > '9')
+      {
+          tempBuf[bufIndex] = currentChar;
+          bufIndex += 1;
+      }
+    }
+    while(input.e != input.w &&
+            input.buf[(input.e-1) % INPUT_BUF] != '\n'){
+        input.e--;
+        consputc(BACKSPACE);
+      }
+    for(int i = 0; i < bufIndex; i++)
+    {
+        input.buf[input.e % INPUT_BUF] = tempBuf[i];
+        input.e += 1;
+        consputc(tempBuf[i]);
+    } 
+}
+
 void
 consoleintr(int (*getc)(void))
 {
@@ -214,37 +263,12 @@ consoleintr(int (*getc)(void))
       }
       break;
 
-      char tempBuff[INPUT_BUF];
-      int i;
     case C('N'):  // delete numbers in current line
-        i = 0;
-        while (input.e != input.w &&
-            input.buf[(input.e - 1) % INPUT_BUF] != '\n') {
-            char s = input.buf[(input.e - 1) % INPUT_BUF];
-            consputc(BACKSPACE);
-            input.e--;
-            if (s < '0' || s > '9')
-            {
-                tempBuff[i] = s;
-                i += 1;
-            }
-        }
-        for (int j = i - 1; j >= 0; j--)
-            consputc(tempBuff[j]);
-        break;
+      printLineWithoutNumbers();
+      break;
         
     case C('R'):  // vice versa line.
-      i = 0;
-      while(input.e != input.w &&
-            input.buf[(input.e-1) % INPUT_BUF] != '\n'){
-        char s = input.buf[(input.e-1) % INPUT_BUF];
-        consputc(BACKSPACE);
-        input.e--;
-        tempBuff[i] = s;
-        i += 1;
-      }
-      for(int j = 0; j <= i - 1; j++)
-        consputc(tempBuff[j]);
+      printReverseLine();
       break;
 
     default:
