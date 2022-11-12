@@ -182,6 +182,7 @@ UPROGS=\
 	_wc\
 	_zombie\
 	_prime_numbers\
+	_get_pid\
 
 fs.img: mkfs README $(UPROGS)
 	./mkfs fs.img README $(UPROGS)
