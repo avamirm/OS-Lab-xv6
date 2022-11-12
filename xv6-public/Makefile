@@ -185,6 +185,7 @@ UPROGS=\
 	_get_pid\
 	_largest_prime_factor\
 	_get_parent_pid\
+	_change_file_size\
 
 fs.img: mkfs README $(UPROGS)
 	./mkfs fs.img README $(UPROGS)
