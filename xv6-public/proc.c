@@ -560,3 +560,9 @@ int find_largest_prime_factor(int n)
   }
   return largest_factor;
 }
+
+int 
+get_parent_pid(void)
+{
+    return myproc()->parent->pid;
+}

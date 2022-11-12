@@ -90,3 +90,9 @@ int sys_find_largest_prime_factor(void)
   cprintf("KERNEL: sys_find_largest_prime_factor() is called for n = %d\n", num);
   return find_largest_prime_factor(num);
 }
+
+int sys_get_parent_pid(void)
+{
+  cprintf("KERNEL: sys_get_parent_pid() is called\n");
+  return get_parent_pid();
+}
