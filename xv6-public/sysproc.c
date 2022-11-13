@@ -96,3 +96,46 @@ int sys_get_parent_pid(void)
   cprintf("KERNEL: sys_get_parent_pid() is called\n");
   return get_parent_pid();
 }
+
+#define PROC_HIST_SIZE 1000
+#define SYSCALL_SIZE 25
+
+int process_count[SYSCALL_SIZE] = {0};
+int process_history[SYSCALL_SIZE][PROC_HIST_SIZE] = {0};
+
+void add_process_history(int sys_call_id, int pid)
+{
+  process_history[sys_call_id - 1][process_count[sys_call_id - 1] % PROC_HIST_SIZE] = pid;
+  process_count[sys_call_id - 1] += 1;
+}
+
+int sys_get_callers(void)
+{
+  int sys_call;
+  if(argint(0, &sys_call) < 0)
+    return -1;
+  cprintf("KERNEL: sys_get_callers() is called for system call with id = %d\n", sys_call);
+  if(process_count[sys_call - 1] <= PROC_HIST_SIZE)
+  {
+    for (int i = 0; i < process_count[sys_call - 1]; i++)
+    {
+      if(i != process_count[sys_call - 1] - 1)
+        cprintf("%d,", process_history[sys_call - 1][i]);
+      else
+        cprintf("%d\n", process_history[sys_call - 1][i]);
+    }
+  }
+  else
+  {
+    int start = process_count[sys_call - 1] % PROC_HIST_SIZE;
+    for (int i = start; i < start + PROC_HIST_SIZE; i++)
+    {
+      int index = i % PROC_HIST_SIZE;
+      if(index  == start - 1)
+        cprintf("%d\n", process_history[sys_call - 1][index]);
+      else
+        cprintf("%d,", process_history[sys_call - 1][index]);
+    }
+  }
+  return 0;
+}
