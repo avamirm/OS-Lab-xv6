@@ -1,10 +1,11 @@
 #include "types.h"
 #include "stat.h"
 #include "user.h"
+#include "fcntl.h"
+
 
 int main(int argc, char *argv[])
 {
-    int pid = getpid();
-    printf(1, "The getpid() value is: %d\n", pid);
-    exit();
+  print_all_processes();
+  exit();
 }

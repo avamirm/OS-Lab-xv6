@@ -187,6 +187,12 @@ UPROGS=\
 	_get_parent_pid\
 	_change_file_size\
 	_get_callers\
+	_change_queue\
+	_set_ticket_chance\
+	_set_bjf_s\
+	_set_bjf_u\
+    _print_processes\
+	_foo\
 
 fs.img: mkfs README $(UPROGS)
 	./mkfs fs.img README $(UPROGS)

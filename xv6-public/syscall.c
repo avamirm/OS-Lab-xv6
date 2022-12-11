@@ -103,6 +103,11 @@ extern int sys_find_largest_prime_factor(void);
 extern int sys_get_parent_pid(void);
 extern int sys_change_file_size(void);
 extern int sys_get_callers(void);
+extern int sys_change_queue(void);
+extern int sys_set_ticket_chance(void);
+extern int sys_set_bjf_s(void);
+extern int sys_set_bjf_u(void);
+extern int sys_print_all_processes(void);
 
 static int (*syscalls[])(void) = {
     [SYS_fork] sys_fork,
@@ -130,6 +135,11 @@ static int (*syscalls[])(void) = {
     [SYS_get_parent_pid] sys_get_parent_pid,
     [SYS_change_file_size] sys_change_file_size,
     [SYS_get_callers] sys_get_callers,
+    [SYS_change_queue] sys_change_queue,
+    [SYS_set_ticket_chance] sys_set_ticket_chance,
+    [SYS_set_bjf_s] sys_set_bjf_s,
+    [SYS_set_bjf_u] sys_set_bjf_u,
+    [SYS_print_all_processes] sys_print_all_processes,
 };
 
 void syscall(void)

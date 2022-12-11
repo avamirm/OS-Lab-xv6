@@ -123,6 +123,12 @@ void yield(void);
 int find_largest_prime_factor(int);
 int get_parent_pid(void);
 void add_process_history(int, int);
+void check_aging(int);
+void change_queue(int, int);
+void set_ticket_chance(int, int);
+void set_bjf_s(int, int, int);
+void set_bjf_u(int, int, int, int);
+void print_all_processes(void);
 
 // swtch.S
 void swtch(struct context **, struct context *);

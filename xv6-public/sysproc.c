@@ -139,3 +139,48 @@ int sys_get_callers(void)
   }
   return 0;
 }
+
+void sys_change_queue(void)
+{
+  int pid, queue;
+  argint(0, &pid);
+  argint(1, &queue);
+  change_queue(pid, queue);
+}
+
+void sys_set_ticket_chance(void)
+{
+  int pid, ticket_chance;
+  argint(0, &pid);
+  argint(1, &ticket_chance);
+  set_ticket_chance(pid, ticket_chance);
+}
+
+int // what would happen if it were void?
+sys_set_bjf_s(void)
+{
+  int priority_ratio, arrival_time_ratio, executed_cycle_ratio;
+  argint(0, &priority_ratio);
+  argint(1, &arrival_time_ratio);
+  argint(2, &executed_cycle_ratio);
+  set_bjf_s(priority_ratio, arrival_time_ratio, executed_cycle_ratio);
+  return 0;
+}
+
+int
+sys_set_bjf_u(void)
+{
+  int pid, priority_ratio, arrival_time_ratio, executed_cycle_ratio;
+  argint(0, &pid);
+  argint(1, &priority_ratio);
+  argint(2, &arrival_time_ratio);
+  argint(3, &executed_cycle_ratio);
+  set_bjf_u(pid, priority_ratio, arrival_time_ratio, executed_cycle_ratio);
+  return 0;
+}
+
+void
+sys_print_all_processes(void)
+{
+  print_all_processes();
+}

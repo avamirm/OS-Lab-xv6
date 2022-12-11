@@ -7,6 +7,10 @@
 #include "proc.h"
 #include "spinlock.h"
 
+float priority_ratio = 0.1;
+float arrival_time_ratio = 0.1;
+float executed_cycle_ratio = 0.1;
+
 struct
 {
   struct spinlock lock;
@@ -66,6 +70,14 @@ myproc(void)
   popcli();
   return p;
 }
+int generate_random(int n)
+{
+  int random;
+  acquire(&tickslock);
+  random = (ticks * ticks *1245) % n;
+  release(&tickslock);
+  return random + 1;
+}
 
 //PAGEBREAK: 32
 // Look in the process table for an UNUSED proc.
@@ -90,7 +102,18 @@ allocproc(void)
 found:
   p->state = EMBRYO;
   p->pid = nextpid++;
-
+  p->queue = 2;///////////////////////////////////////////////////////////////////////////////////////////////////////////
+  p->ticket_chance = generate_random(100) + 1;
+  p->priority = 1 / (float)p->ticket_chance;
+  p->last_cpu_use = 0;
+  acquire(&tickslock);
+  p ->arrival_time = ticks;
+  release(&tickslock);
+  p->exec_cycle = 0.0;
+  p->priority_ratio = 0.1;
+  p->arrival_time_ratio = 0.1;
+  p->executed_cycle_ratio = 0.1;
+  /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
   release(&ptable.lock);
 
   // Allocate kernel stack.
@@ -126,7 +149,8 @@ void userinit(void)
   extern char _binary_initcode_start[], _binary_initcode_size[];
 
   p = allocproc();
-
+  p -> queue = 1;////////////////////////////////////////////////////////////////////////////////////////////////////////////
+  ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
   initproc = p;
   if ((p->pgdir = setupkvm()) == 0)
     panic("userinit: out of memory?");
@@ -220,7 +244,13 @@ int fork(void)
   acquire(&ptable.lock);
 
   np->state = RUNNABLE;
-
+  // np->queue = 2;////////////////////////////////////////////////////////////////////////////////////////////////////////////
+  // np -> ticket_chance = 1;
+  // np->exec_cycle += 0.1;
+  acquire(&tickslock);
+  np -> last_cpu_use = ticks;
+  release(&tickslock);
+  ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
   release(&ptable.lock);
 
   return pid;
@@ -330,39 +360,118 @@ int wait(void)
 //  - swtch to start running that process
 //  - eventually that process transfers control
 //      via swtch back to the scheduler.
-void scheduler(void)
+
+struct proc*
+lottery(void)
 {
   struct proc *p;
-  struct cpu *c = mycpu();
-  c->proc = 0;
+  int count = 0;
+  for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
+      if (p->state != RUNNABLE || p->queue != 2)
+        continue;
+      count += p->ticket_chance;
+  }
+  struct proc* chosen_proc = 0;
+  if (count == 0)
+    return chosen_proc;
+  int rand = generate_random(count);
+  count = 0;
+  for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
 
-  for (;;)
+      if (p->state != RUNNABLE || p->queue != 2 )
+        continue;
+      
+      count += p->ticket_chance;
+      if (rand <= count)
+      {
+        chosen_proc = p;
+        break;
+      }
+  }
+  return chosen_proc;
+}
+int
+round_robin(int last_used)
+{
+  int found_proc_index = -1;
+  int i;
+  for(i = 1; i <= NPROC; i++)
   {
-    // Enable interrupts on this processor.
-    sti();
-
-    // Loop over process table looking for process to run.
-    acquire(&ptable.lock);
-    for (p = ptable.proc; p < &ptable.proc[NPROC]; p++)
-    {
-      if (p->state != RUNNABLE)
+      int index = (i + last_used) % NPROC;
+      if(ptable.proc[index].state != RUNNABLE || ptable.proc[index].queue != 1)
         continue;
 
-      // Switch to chosen process.  It is the process's job
-      // to release ptable.lock and then reacquire it
-      // before jumping back to us.
-      c->proc = p;
-      switchuvm(p);
-      p->state = RUNNING;
+      found_proc_index = index;
+      break;
+  }
+  return found_proc_index;
+}
+float
+get_rank(struct proc *p)
+{
+  return p->priority * p->priority_ratio
+    + p->arrival_time * p->arrival_time_ratio
+    + p->exec_cycle * p->executed_cycle_ratio;
+}
 
-      swtch(&(c->scheduler), p->context);
-      switchkvm();
+struct proc*
+bjf(void)
+{
+  struct proc* p;
+  struct proc* first_rank = 0;
+  float min_rank = 2e6;
 
-      // Process is done running for now.
-      // It should have changed its p->state before coming back.
-      c->proc = 0;
+  for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){ 
+    if (p->state != RUNNABLE || p->queue != 3)
+      continue;
+    float rank = get_rank(p);
+    if (rank< min_rank){
+      first_rank = p;
+      min_rank = rank;
     }
+  }
+
+  return first_rank;
+}
+
+void
+scheduler(void)
+{
+  struct proc *p = 0;
+  struct cpu *c = mycpu();
+  c->proc = 0;
+  int found_index = -1;
+
+  for(;;){
+    // Enable interrupts on this processor.
+    sti();
+    acquire(&ptable.lock);
+    found_index = round_robin(found_index);
+    if (found_index != -1)
+        p = &ptable.proc[found_index];
+    
+    if (found_index == -1)
+        p = lottery();
+
+    if(p == 0)
+       p = bjf();
+    
+    if (p == 0){
+      release(&ptable.lock);
+      continue;
+    }
+    c->proc = p;
+    switchuvm(p);
+    p->state = RUNNING;
+    p->exec_cycle += 0.1;
+    acquire(&tickslock);
+    p -> last_cpu_use = ticks;
+    release(&tickslock);
+    swtch(&(c->scheduler), p->context);
+    switchkvm();
+    c->proc = 0;
     release(&ptable.lock);
+
   }
 }
 
@@ -566,3 +675,147 @@ get_parent_pid(void)
 {
     return myproc()->parent->pid;
 }
+void check_aging(int tick)
+{
+  struct proc* p;
+  for(p = ptable.proc; p < &ptable.proc[NPROC]; p++)
+      if (tick - p->last_cpu_use >= 8000)
+          p->queue = 1;
+}
+
+void
+change_queue(int pid, int queue)
+{
+  struct proc *p;
+  acquire(&ptable.lock);
+  for (p = ptable.proc; p < &ptable.proc[NPROC]; p++)
+  {
+    if (p->pid == pid)    
+    {
+      p->queue = queue;
+      cprintf("Process %d is now in queue %d\n", pid, queue);
+      break;
+    }
+  }
+  release(&ptable.lock);
+}
+
+void
+set_ticket_chance(int pid, int ticket_chance){
+  struct proc *p;
+  acquire(&ptable.lock);
+  for (p = ptable.proc; p < &ptable.proc[NPROC]; p++)
+  {
+    if (p->pid == pid)
+    {
+        p->ticket_chance = ticket_chance;
+        cprintf("Process %d has chance of:  %d\n", pid, ticket_chance);
+    }
+  }
+  release(&ptable.lock); 
+}
+
+void 
+set_bjf_s(int pr, int a_t_r, int e_c_r)
+{
+  struct proc *p;
+  priority_ratio = pr;
+  arrival_time_ratio = a_t_r;
+  executed_cycle_ratio = e_c_r;
+  acquire(&ptable.lock);
+  cprintf("Bjf params set for all processes\n");
+  for (p = ptable.proc; p < &ptable.proc[NPROC]; p++)
+  {
+    p->priority_ratio = priority_ratio;
+    p->arrival_time_ratio = arrival_time_ratio;
+    p->executed_cycle_ratio = executed_cycle_ratio; 
+  }
+  release(&ptable.lock); 
+}
+
+void
+set_bjf_u(int pid, int priority_ratio, int arrival_time_ratio, int executed_cycle_ratio)
+{
+  struct proc *p;
+
+  acquire(&ptable.lock);
+  for (p = ptable.proc; p < &ptable.proc[NPROC]; p++)
+  {
+    if (p->pid == pid)
+    {
+      p->priority_ratio = priority_ratio;
+      p->arrival_time_ratio = arrival_time_ratio;
+      p->executed_cycle_ratio = executed_cycle_ratio; 
+      cprintf("BJF params set for pid: %d\n", p->pid);
+      break;
+    }
+  }
+  release(&ptable.lock); 
+}
+char*
+get_state_name(int state)
+{
+  if (state == 0) {
+    return "UNUSED";
+  }
+  else if (state == 1) {
+    return "EMBRYO";
+  }
+  else if (state == 2) {
+    return "SLEEPING";
+  }
+  else if (state == 3) {
+    return "RUNNABLE";
+  }
+  else if (state == 4) {
+    return "RUNNING";
+  }
+  else if (state == 5) {
+    return "ZOMBIE";
+  }
+  else {
+    return "";
+  }
+}
+int round(float num){
+  if(num - (int)(num) <= 0.5)
+    return (int)(num);
+  return (int)(num) + 1;
+}
+void print_all_processes()
+{
+  struct proc *p;
+  acquire(&ptable.lock);
+  for (p = ptable.proc; p < &ptable.proc[NPROC]; p++)
+  {
+    if (p->state == UNUSED)
+      continue;
+
+    cprintf("Name: %s    ", p->name);
+
+    cprintf("Pid: %d    ", p->pid);
+
+    cprintf("State: %s    ", get_state_name(p->state));
+
+    cprintf("Queue: %d    ", p->queue);
+
+    cprintf("Ticket_Chance: %d    ", p->ticket_chance);
+
+    cprintf("Priority_Ratio: %d    ", round(p->priority_ratio));
+
+    cprintf("Arrival_time_Ratio: %d    ", round(p->arrival_time_ratio));
+
+    cprintf("Executed_Cycle_Ratio: %d    ", round(p->executed_cycle_ratio));
+
+    cprintf("Arrival_time: %d    ", p->arrival_time);
+
+    cprintf("Exec_cycle * 10: %d    ", round(p->exec_cycle));
+
+    cprintf("rank: %d    ", round(get_rank(p)));
+
+    cprintf("--------------------------------------------------------------------------------\n");
+    cprintf("\n");
+  }
+  release(&ptable.lock);
+}
+

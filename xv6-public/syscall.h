@@ -24,3 +24,8 @@
 #define SYS_get_parent_pid 23
 #define SYS_change_file_size 24
 #define SYS_get_callers  25
+#define SYS_change_queue 26
+#define SYS_set_ticket_chance 27
+#define SYS_set_bjf_s  28
+#define SYS_set_bjf_u  29
+#define SYS_print_all_processes 30
