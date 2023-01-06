@@ -7,17 +7,22 @@
 #include "proc.h"
 #include "spinlock.h"
 
-float priority_ratio = 0.1;
-float arrival_time_ratio = 0.1;
-float executed_cycle_ratio = 0.1;
-
 struct
 {
   struct spinlock lock;
   struct proc proc[NPROC];
 } ptable;
-
+#define CONDITION_VAR_COUNT 5
 static struct proc *initproc;
+struct condition_var
+{
+  int max_proc;  
+  int cur_proc;
+  int last; 
+  struct spinlock lock; 
+  struct proc* queue[NPROC]; 
+
+} condition_vars[CONDITION_VAR_COUNT];
 
 int nextpid = 1;
 extern void forkret(void);
@@ -70,14 +75,6 @@ myproc(void)
   popcli();
   return p;
 }
-int generate_random(int n)
-{
-  int random;
-  acquire(&tickslock);
-  random = (ticks * ticks *1245) % n;
-  release(&tickslock);
-  return random + 1;
-}
 
 //PAGEBREAK: 32
 // Look in the process table for an UNUSED proc.
@@ -102,18 +99,7 @@ allocproc(void)
 found:
   p->state = EMBRYO;
   p->pid = nextpid++;
-  p->queue = 2;///////////////////////////////////////////////////////////////////////////////////////////////////////////
-  p->ticket_chance = generate_random(100) + 1;
-  p->priority = 1 / (float)p->ticket_chance;
-  p->last_cpu_use = 0;
-  acquire(&tickslock);
-  p ->arrival_time = ticks;
-  release(&tickslock);
-  p->exec_cycle = 0.0;
-  p->priority_ratio = 0.1;
-  p->arrival_time_ratio = 0.1;
-  p->executed_cycle_ratio = 0.1;
-  /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
   release(&ptable.lock);
 
   // Allocate kernel stack.
@@ -149,8 +135,7 @@ void userinit(void)
   extern char _binary_initcode_start[], _binary_initcode_size[];
 
   p = allocproc();
-  p -> queue = 1;////////////////////////////////////////////////////////////////////////////////////////////////////////////
-  ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
   initproc = p;
   if ((p->pgdir = setupkvm()) == 0)
     panic("userinit: out of memory?");
@@ -244,13 +229,7 @@ int fork(void)
   acquire(&ptable.lock);
 
   np->state = RUNNABLE;
-  // np->queue = 2;////////////////////////////////////////////////////////////////////////////////////////////////////////////
-  // np -> ticket_chance = 1;
-  // np->exec_cycle += 0.1;
-  acquire(&tickslock);
-  np -> last_cpu_use = ticks;
-  release(&tickslock);
-  ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
   release(&ptable.lock);
 
   return pid;
@@ -360,118 +339,39 @@ int wait(void)
 //  - swtch to start running that process
 //  - eventually that process transfers control
 //      via swtch back to the scheduler.
-
-struct proc*
-lottery(void)
+void scheduler(void)
 {
   struct proc *p;
-  int count = 0;
-  for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
-      if (p->state != RUNNABLE || p->queue != 2)
-        continue;
-      count += p->ticket_chance;
-  }
-  struct proc* chosen_proc = 0;
-  if (count == 0)
-    return chosen_proc;
-  int rand = generate_random(count);
-  count = 0;
-  for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
-
-      if (p->state != RUNNABLE || p->queue != 2 )
-        continue;
-      
-      count += p->ticket_chance;
-      if (rand <= count)
-      {
-        chosen_proc = p;
-        break;
-      }
-  }
-  return chosen_proc;
-}
-int
-round_robin(int last_used)
-{
-  int found_proc_index = -1;
-  int i;
-  for(i = 1; i <= NPROC; i++)
-  {
-      int index = (i + last_used) % NPROC;
-      if(ptable.proc[index].state != RUNNABLE || ptable.proc[index].queue != 1)
-        continue;
-
-      found_proc_index = index;
-      break;
-  }
-  return found_proc_index;
-}
-float
-get_rank(struct proc *p)
-{
-  return p->priority * p->priority_ratio
-    + p->arrival_time * p->arrival_time_ratio
-    + p->exec_cycle * p->executed_cycle_ratio;
-}
-
-struct proc*
-bjf(void)
-{
-  struct proc* p;
-  struct proc* first_rank = 0;
-  float min_rank = 2e6;
-
-  for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){ 
-    if (p->state != RUNNABLE || p->queue != 3)
-      continue;
-    float rank = get_rank(p);
-    if (rank< min_rank){
-      first_rank = p;
-      min_rank = rank;
-    }
-  }
-
-  return first_rank;
-}
-
-void
-scheduler(void)
-{
-  struct proc *p = 0;
   struct cpu *c = mycpu();
   c->proc = 0;
-  int found_index = -1;
 
-  for(;;){
+  for (;;)
+  {
     // Enable interrupts on this processor.
     sti();
+
+    // Loop over process table looking for process to run.
     acquire(&ptable.lock);
-    found_index = round_robin(found_index);
-    if (found_index != -1)
-        p = &ptable.proc[found_index];
-    
-    if (found_index == -1)
-        p = lottery();
+    for (p = ptable.proc; p < &ptable.proc[NPROC]; p++)
+    {
+      if (p->state != RUNNABLE)
+        continue;
 
-    if(p == 0)
-       p = bjf();
-    
-    if (p == 0){
-      release(&ptable.lock);
-      continue;
+      // Switch to chosen process.  It is the process's job
+      // to release ptable.lock and then reacquire it
+      // before jumping back to us.
+      c->proc = p;
+      switchuvm(p);
+      p->state = RUNNING;
+
+      swtch(&(c->scheduler), p->context);
+      switchkvm();
+
+      // Process is done running for now.
+      // It should have changed its p->state before coming back.
+      c->proc = 0;
     }
-    c->proc = p;
-    switchuvm(p);
-    p->state = RUNNING;
-    p->exec_cycle += 0.1;
-    acquire(&tickslock);
-    p -> last_cpu_use = ticks;
-    release(&tickslock);
-    swtch(&(c->scheduler), p->context);
-    switchkvm();
-    c->proc = 0;
     release(&ptable.lock);
-
   }
 }
 
@@ -675,147 +575,113 @@ get_parent_pid(void)
 {
     return myproc()->parent->pid;
 }
-void check_aging(int tick)
+const int THRESHOLD = 3;
+int phil_wait_counts[CONDITION_VAR_COUNT] = {0,0,0,0,0};
+
+
+void
+sem_init(int i, int v)
 {
-  struct proc* p;
-  for(p = ptable.proc; p < &ptable.proc[NPROC]; p++)
-      if (tick - p->last_cpu_use >= 8000)
-          p->queue = 1;
+  condition_vars[i].max_proc = v;
+  condition_vars[i].last = 0;
+  condition_vars[i].cur_proc = 0;
+  
+  for (int j = 0; j < NPROC; ++j)
+    condition_vars[i].queue[j] = 0;
+
 }
 
 void
-change_queue(int pid, int queue)
+sem_acquire(int i)
 {
-  struct proc *p;
-  acquire(&ptable.lock);
-  for (p = ptable.proc; p < &ptable.proc[NPROC]; p++)
-  {
-    if (p->pid == pid)    
-    {
-      p->queue = queue;
-      cprintf("Process %d is now in queue %d\n", pid, queue);
-      break;
-    }
-  }
-  release(&ptable.lock);
+  acquire(&condition_vars[i].lock);
+  condition_vars[i].cur_proc++;
+  condition_vars[i].queue[condition_vars[i].last] = myproc();
+  condition_vars[i].last++;
+  cprintf("Philosopher %d going to sleep\n", i+1);
+  sleep(myproc(), &(condition_vars[i].lock));
+  cprintf("Philosopher %d woke up\n", i+1);
+  release(&condition_vars[i].lock);
 }
 
 void
-set_ticket_chance(int pid, int ticket_chance){
-  struct proc *p;
-  acquire(&ptable.lock);
-  for (p = ptable.proc; p < &ptable.proc[NPROC]; p++)
+sem_release(int i)
+{
+  acquire(&condition_vars[i].lock);
+  
+  if (condition_vars[i].cur_proc > 0 && condition_vars[i].cur_proc <= condition_vars[i].max_proc)
   {
-    if (p->pid == pid)
-    {
-        p->ticket_chance = ticket_chance;
-        cprintf("Process %d has chance of:  %d\n", pid, ticket_chance);
+    struct proc* p = condition_vars[i].queue[0];
+    condition_vars[i].cur_proc--;
+    for (int j = 1; j < condition_vars[i].last ; ++j)
+      condition_vars[i].queue[j - 1] = condition_vars[i].queue[j];
+    condition_vars[i].last--;
+    wakeup(p);
+  }
+  release(&condition_vars[i].lock);
+}
+
+int state[5]={2,2,2,2,2};
+const int HUNGRY=0;
+const int EATING=1;
+const int THINKING=2;
+
+struct condition_var statelock;
+
+int
+deep_test(int num)
+{
+    int right_neigh = (num+1)%5;
+    int left_neigh = (num+4)%5;
+    int self_thresh = phil_wait_counts[num];
+    if(state[right_neigh] == HUNGRY && phil_wait_counts[right_neigh] >= THRESHOLD && phil_wait_counts[right_neigh] > self_thresh) {
+      cprintf("Philosopher %d going to sleep beacause of deep test for philosopher %d\n", num+1, right_neigh+1);
+      return 0;
     }
-  }
-  release(&ptable.lock); 
-}
 
-void 
-set_bjf_s(int pr, int a_t_r, int e_c_r)
-{
-  struct proc *p;
-  priority_ratio = pr;
-  arrival_time_ratio = a_t_r;
-  executed_cycle_ratio = e_c_r;
-  acquire(&ptable.lock);
-  cprintf("Bjf params set for all processes\n");
-  for (p = ptable.proc; p < &ptable.proc[NPROC]; p++)
-  {
-    p->priority_ratio = priority_ratio;
-    p->arrival_time_ratio = arrival_time_ratio;
-    p->executed_cycle_ratio = executed_cycle_ratio; 
-  }
-  release(&ptable.lock); 
-}
-
-void
-set_bjf_u(int pid, int priority_ratio, int arrival_time_ratio, int executed_cycle_ratio)
-{
-  struct proc *p;
-
-  acquire(&ptable.lock);
-  for (p = ptable.proc; p < &ptable.proc[NPROC]; p++)
-  {
-    if (p->pid == pid)
-    {
-      p->priority_ratio = priority_ratio;
-      p->arrival_time_ratio = arrival_time_ratio;
-      p->executed_cycle_ratio = executed_cycle_ratio; 
-      cprintf("BJF params set for pid: %d\n", p->pid);
-      break;
+    if(state[left_neigh] == HUNGRY && phil_wait_counts[left_neigh] >= THRESHOLD && phil_wait_counts[left_neigh] > self_thresh) {
+      cprintf("Philosopher %d going to sleep beacause of deep test for philosopher %d\n", num+1, left_neigh+1);
+      return 0;
     }
-  }
-  release(&ptable.lock); 
+    return 1;
 }
-char*
-get_state_name(int state)
+
+void test(int num)
 {
-  if (state == 0) {
-    return "UNUSED";
-  }
-  else if (state == 1) {
-    return "EMBRYO";
-  }
-  else if (state == 2) {
-    return "SLEEPING";
-  }
-  else if (state == 3) {
-    return "RUNNABLE";
-  }
-  else if (state == 4) {
-    return "RUNNING";
-  }
-  else if (state == 5) {
-    return "ZOMBIE";
-  }
-  else {
-    return "";
-  }
+    if (state[num] == HUNGRY && state[(num+4)%5] != EATING && state[(num+1)%5] != EATING && deep_test(num)) {
+          state[num] = EATING;
+          cprintf("Philosopher %d picking spoon %d and %d\n",num + 1, (num)%5+1, (num+1)%5 + 1);
+          cprintf("Philosopher %d is Eating\n", num + 1);
+          phil_wait_counts[num] = 0;
+          sem_release(num);
+    }
+    else {
+      phil_wait_counts[num]++;
+      cprintf("Philosopher %d can't eat and wait_thresh: %d\n", num + 1, phil_wait_counts[num]);
+    }
 }
-int round(float num){
-  if(num - (int)(num) <= 0.5)
-    return (int)(num);
-  return (int)(num) + 1;
-}
-void print_all_processes()
+
+
+
+void pickup(int num)
 {
-  struct proc *p;
-  acquire(&ptable.lock);
-  for (p = ptable.proc; p < &ptable.proc[NPROC]; p++)
-  {
-    if (p->state == UNUSED)
-      continue;
-
-    cprintf("Name: %s    ", p->name);
-
-    cprintf("Pid: %d    ", p->pid);
-
-    cprintf("State: %s    ", get_state_name(p->state));
-
-    cprintf("Queue: %d    ", p->queue);
-
-    cprintf("Ticket_Chance: %d    ", p->ticket_chance);
-
-    cprintf("Priority_Ratio: %d    ", round(p->priority_ratio));
-
-    cprintf("Arrival_time_Ratio: %d    ", round(p->arrival_time_ratio));
-
-    cprintf("Executed_Cycle_Ratio: %d    ", round(p->executed_cycle_ratio));
-
-    cprintf("Arrival_time: %d    ", p->arrival_time);
-
-    cprintf("Exec_cycle * 10: %d    ", round(p->exec_cycle));
-
-    cprintf("rank: %d    ", round(get_rank(p)));
-
-    cprintf("--------------------------------------------------------------------------------\n");
-    cprintf("\n");
-  }
-  release(&ptable.lock);
+ 
+    acquire(&statelock.lock);
+    state[num] = HUNGRY;
+    cprintf("Philosopher %d is Hungry\n", num + 1);
+    test(num);
+    release(&statelock.lock);
+    if(state[num]!=EATING)
+      sem_acquire(num);
 }
-
+ 
+void putdown(int num)
+{
+    acquire(&statelock.lock);
+    state[num] = THINKING;
+    cprintf("Philosopher %d putting spoon %d and %d down\n",num + 1, (num)%5+1, (num+1)%5 + 1);
+    cprintf("Philosopher %d is Thinking\n", num + 1);
+    test((num+4)%5);
+    test((num+1)%5);
+    release(&statelock.lock);
+}

@@ -139,48 +139,49 @@ int sys_get_callers(void)
   }
   return 0;
 }
-
-void sys_change_queue(void)
+void
+sys_sem_init(void)
 {
-  int pid, queue;
-  argint(0, &pid);
-  argint(1, &queue);
-  change_queue(pid, queue);
+  int i, v;
+  if (argint(0, &i) < 0)
+      return;
+  if (argint(1, &v) < 0)
+    return;
+  sem_init(i, v);
+  return;
 }
-
-void sys_set_ticket_chance(void)
+void
+sys_sem_acquire(void)
 {
-  int pid, ticket_chance;
-  argint(0, &pid);
-  argint(1, &ticket_chance);
-  set_ticket_chance(pid, ticket_chance);
-}
-
-int // what would happen if it were void?
-sys_set_bjf_s(void)
-{
-  int priority_ratio, arrival_time_ratio, executed_cycle_ratio;
-  argint(0, &priority_ratio);
-  argint(1, &arrival_time_ratio);
-  argint(2, &executed_cycle_ratio);
-  set_bjf_s(priority_ratio, arrival_time_ratio, executed_cycle_ratio);
-  return 0;
-}
-
-int
-sys_set_bjf_u(void)
-{
-  int pid, priority_ratio, arrival_time_ratio, executed_cycle_ratio;
-  argint(0, &pid);
-  argint(1, &priority_ratio);
-  argint(2, &arrival_time_ratio);
-  argint(3, &executed_cycle_ratio);
-  set_bjf_u(pid, priority_ratio, arrival_time_ratio, executed_cycle_ratio);
-  return 0;
+  int i;
+  if (argint(0, &i) < 0)
+      return;
+  sem_acquire(i);
+  return;
 }
 
 void
-sys_print_all_processes(void)
+sys_sem_release(void)
 {
-  print_all_processes();
+  int i;
+  if (argint(0, &i) < 0)
+      return;
+  sem_release(i);
+  return;
+}
+
+int sys_pickup(void){
+  int i;
+  if (argint(0, &i) < 0)
+      return -1;
+  pickup(i);
+  return 0;
+}
+
+int sys_putdown(void){
+  int i;
+  if (argint(0, &i) < 0)
+      return -1;
+  putdown(i);
+  return 0;
 }

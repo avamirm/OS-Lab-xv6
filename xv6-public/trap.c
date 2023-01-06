@@ -32,7 +32,6 @@ idtinit(void)
   lidt(idt, sizeof(idt));
 }
 
-
 //PAGEBREAK: 41
 void
 trap(struct trapframe *tf)
@@ -52,9 +51,6 @@ trap(struct trapframe *tf)
     if(cpuid() == 0){
       acquire(&tickslock);
       ticks++;
-      //////////////////////////////////////////////////////////////////////////////////
-      check_aging(ticks);
-      ///////////////////////////////////////////////////////////////////////////////
       wakeup(&ticks);
       release(&tickslock);
     }

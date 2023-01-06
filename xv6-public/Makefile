@@ -187,12 +187,8 @@ UPROGS=\
 	_get_parent_pid\
 	_change_file_size\
 	_get_callers\
-	_change_queue\
-	_set_ticket_chance\
-	_set_bjf_s\
-	_set_bjf_u\
-    _print_processes\
-	_foo\
+	_test_program\
+	_philosophers\
 
 fs.img: mkfs README $(UPROGS)
 	./mkfs fs.img README $(UPROGS)
@@ -262,7 +258,7 @@ qemu-nox-gdb: fs.img xv6.img .gdbinit
 EXTRA=\
 	mkfs.c ulib.c user.h cat.c echo.c forktest.c grep.c kill.c\
 	ln.c ls.c mkdir.c rm.c stressfs.c usertests.c wc.c zombie.c\
-	prime_numbers.c printf.c umalloc.c largest_prime_factor.c _get_parent_pid.c\
+	prime_numbers.c printf.c umalloc.c largest_prime_factor.c _get_parent_pid.c test_program.c philosophers.c\
 	README dot-bochsrc *.pl toc.* runoff runoff1 runoff.list\
 	.gdbinit.tmpl gdbutil\
 

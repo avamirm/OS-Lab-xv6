@@ -27,11 +27,11 @@ int find_largest_prime_factor(void);
 int get_parent_pid(void);
 int change_file_size(char *, int);
 int get_callers(int);
-void change_queue(int, int);
-void set_ticket_chance(int, int);
-int set_bjf_s(int, int, int);
-int set_bjf_u(int, int, int, int);
-void print_all_processes(void);
+void sem_init(int,int);
+void sem_acquire(int);
+void sem_release(int);
+void pickup(int);
+void putdown(int);
 
 // ulib.c
 int stat(const char *, struct stat *);
